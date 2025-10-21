@@ -73,6 +73,10 @@ REQUIRE_MULTI_VC = os.getenv("REQUIRE_MULTI_VC", "true").lower() == "true"
 DIGEST_INTERVAL_HOURS = int(os.getenv("DIGEST_INTERVAL_HOURS", "4"))  # one email every 4h
 DIGEST_SUBJECT = os.getenv("DIGEST_SUBJECT", "VC Signals — Recap")
 TIMEZONE = os.getenv("TIMEZONE", "Europe/Paris")
+# --- Report settings ---
+REPORT_PATH = os.getenv("REPORT_PATH", "REPORT.md")
+SNAPSHOT_DAILY = os.getenv("SNAPSHOT_DAILY", "false").lower() == "true"
+REPORTS_DIR = os.getenv("REPORTS_DIR", "reports")
 
 
 HEADERS = {
@@ -92,16 +96,17 @@ HEADERS = {
 
 def load_state() -> dict:
     if not os.path.exists(STATE_PATH):
-        return {"seen_items": {}}  # { source_key: set([...]) }
+        return {"seen_items": {}, "overlaps": {}, "pending_signals": []}
     try:
         with open(STATE_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
-            if "seen_items" not in data:
-                data["seen_items"] = {}
+            data.setdefault("seen_items", {})
+            data.setdefault("pending_signals", [])
+            data.setdefault("overlaps", {})  # NEW
             return data
     except Exception:
         logging.exception("Failed to load state; creating new.")
-        return {"seen_items": {}}
+        return {"seen_items": {}, "pending_signals": [], "overlaps": {}}
 
 
 def save_state(state: dict) -> None:
@@ -490,6 +495,20 @@ def now_local() -> datetime:
             pass
     return datetime.now()  # fallback
 
+def start_of_today() -> datetime:
+    n = now_local()
+    return n.replace(hour=0, minute=0, second=0, microsecond=0)
+
+def start_of_week() -> datetime:
+    n = now_local()
+    monday = n - timedelta(days=n.weekday())  # Monday=0
+    return monday.replace(hour=0, minute=0, second=0, microsecond=0)
+
+def start_of_month() -> datetime:
+    n = now_local()
+    return n.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
 def state_get_list(state: dict, key: str) -> list:
     lst = state.get(key)
     if not isinstance(lst, list):
@@ -547,6 +566,7 @@ def render_digest_html(pending: list) -> str:
           </td>
         </tr>
         """)
+
     body = "".join(rows) or "<tr><td style='padding:16px'>No new items in this window.</td></tr>"
     ts = now_local().strftime("%Y-%m-%d %H:%M")
     return f"""
@@ -565,6 +585,115 @@ def render_digest_html(pending: list) -> str:
       </div>
     </div>
     """
+
+# -------------------------
+# REPORT.md helpers
+# -------------------------
+
+def _iso_to_dt(s: str) -> Optional[datetime]:
+    try:
+        return datetime.fromisoformat(s)
+    except Exception:
+        return None
+
+def _within(dt: Optional[datetime], start: datetime) -> bool:
+    return bool(dt and dt >= start)
+
+def _md_table(rows: List[List[str]]) -> str:
+    if not rows:
+        return "_No new overlaps in this window._\n"
+    header = ["Project", "First Seen (local)", "VCs", "Score", "Link"]
+    sep = ["---"] * len(header)
+    out = ["| " + " | ".join(header) + " |", "| " + " | ".join(sep) + " |"]
+    out += ["| " + " | ".join(r) + " |" for r in rows]
+    return "\n".join(out) + "\n"
+
+def _format_dt_local(iso: str) -> str:
+    dt = _iso_to_dt(iso)
+    if not dt:
+        return iso
+    try:
+        if dt.tzinfo is None and ZoneInfo:
+            dt = dt.replace(tzinfo=ZoneInfo(TIMEZONE))
+        elif ZoneInfo:
+            dt = dt.astimezone(ZoneInfo(TIMEZONE))
+    except Exception:
+        pass
+    return dt.strftime("%Y-%m-%d %H:%M")
+
+def _collect_rows(state: dict, start: datetime) -> List[List[str]]:
+    overlaps: dict = state.get("overlaps", {})
+    rows: List[List[str]] = []
+    for k, ov in overlaps.items():
+        fs = _iso_to_dt(ov.get("first_seen", ""))
+        if not _within(fs, start):
+            continue
+        name = ov.get("name", k)
+        vcs = ", ".join(ov.get("vcs", []))
+        score = str(int(ov.get("score", 0)))
+        link = ov.get("url", "")
+        link_md = f"[link]({link})" if link else ""
+        rows.append([
+            name,
+            _format_dt_local(ov.get("first_seen", "")),
+            vcs,
+            score,
+            link_md
+        ])
+    rows.sort(key=lambda r: r[1], reverse=True)  # first_seen desc (string is local formatted)
+    return rows
+
+def render_report_md(state: dict) -> str:
+    ts = now_local().strftime("%Y-%m-%d %H:%M")
+    today_rows = _collect_rows(state, start_of_today())
+    week_rows  = _collect_rows(state, start_of_week())
+    month_rows = _collect_rows(state, start_of_month())
+
+    lines = []
+    lines.append(f"# VC Signals — Multi-VC Overlaps Report\n")
+    lines.append(f"_Auto-generated: {ts} ({TIMEZONE})_\n")
+    lines.append("\n## Today’s new overlaps\n")
+    lines.append(_md_table(today_rows))
+    lines.append("\n## Weekly new overlaps\n")
+    lines.append(_md_table(week_rows))
+    lines.append("\n## Monthly new overlaps\n")
+    lines.append(_md_table(month_rows))
+    lines.append("\n> Definition: “new overlaps” means the project’s **first time** it qualified as a multi-VC match within the window.\n")
+    return "\n".join(lines)
+
+def write_text_if_changed(path: str, content: str) -> bool:
+    """Write file only if content differs. Returns True if a write occurred."""
+    try:
+        old = ""
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                old = f.read()
+        if old == content:
+            return False
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp, path)
+        return True
+    except Exception:
+        logging.exception("Failed to write %s", path)
+        return False
+
+def maybe_write_daily_snapshot(content: str) -> Optional[str]:
+    if not SNAPSHOT_DAILY:
+        return None
+    try:
+        os.makedirs(REPORTS_DIR, exist_ok=True)
+        fname = now_local().strftime("%Y-%m-%d") + ".md"
+        fpath = os.path.join(REPORTS_DIR, fname)
+        if not os.path.exists(fpath):
+            wrote = write_text_if_changed(fpath, content)
+            if wrote:
+                return fpath
+    except Exception:
+        logging.exception("Daily snapshot write failed")
+    return None
 
 def send_digest_if_due(state: dict) -> None:
     if not should_send_digest(state):
@@ -619,7 +748,7 @@ def main() -> None:
     # name_lower -> {"display": original_casing, "sources": {source_name: url}}
     vc_hits: Dict[str, Dict[str, Dict[str, str]]] = {}
 
-    for src in VC_SOURCES:
+        for src in VC_SOURCES:
         projects = fetch_source_list(src)
         logging.info("Fetched %d items from %s", len(projects), src.name)
         for name, link in projects:
@@ -630,6 +759,7 @@ def main() -> None:
 
     # 2) Optional: lightweight presence check (CoinGecko)
     cg_names: Set[str] = set()
+
     if COINGECKO_NEW_COIN_CHECK:
         coins = coingecko_new_coins()
         for c in coins:
@@ -638,7 +768,7 @@ def main() -> None:
                 cg_names.add(nm.lower())
         logging.info("CoinGecko list size: %d", len(cg_names))
 
-        # 3) Compute signals and alert on NEW ones only
+    # 3) Compute signals and alert on NEW ones only
     for name_lc, entry in vc_hits.items():
         source_map = entry["sources"]
         display_name = entry["display"]
@@ -658,7 +788,29 @@ def main() -> None:
             seen_src = seen.setdefault("vc_signals", [])
             if bucket not in seen_src:
                 seen_src.append(bucket)
-                # queue for digest
+
+                # --- overlaps registry (first_seen/last_seen) ---
+                overlaps = state.setdefault("overlaps", {})
+                ov = overlaps.get(name_lc)
+                ts_now = now_local().isoformat(timespec="seconds")
+                if ov is None:
+                    overlaps[name_lc] = {
+                        "name": display_name,
+                        "url": first_link,
+                        "vcs": sorted(tags),
+                        "score": score,
+                        "first_seen": ts_now,
+                        "last_seen": ts_now,
+                    }
+                else:
+                    ov["last_seen"] = ts_now
+                    ov["name"] = display_name or ov.get("name", display_name)
+                    if first_link and not ov.get("url"):
+                        ov["url"] = first_link
+                    ov["vcs"] = sorted(set(ov.get("vcs", [])).union(tags))
+                    ov["score"] = max(int(ov.get("score", 0)), score)
+
+                # queue for digest (unchanged)
                 queue_signal(state, {
                     "name": display_name,
                     "url": first_link,
@@ -666,8 +818,17 @@ def main() -> None:
                     "score": score,
                 })
 
+
     # try to send the 4h digest if due
     send_digest_if_due(state)
+    # --- Generate REPORT.md (only if changed) ---
+    report_md = render_report_md(state)
+    wrote_report = write_text_if_changed(REPORT_PATH, report_md)
+    snapshot_path = maybe_write_daily_snapshot(report_md)
+    if wrote_report:
+        logging.info("Updated %s", REPORT_PATH)
+    if snapshot_path:
+        logging.info("Wrote daily snapshot %s", snapshot_path)
 
     save_state(state)
 
