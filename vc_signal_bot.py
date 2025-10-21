@@ -745,72 +745,46 @@ def send_email_html(subject: str, html_body: str, plain_fallback: str = "") -> b
 # -------------------------
 
  def main() -> None:
-     state = load_state()
-     seen = state.setdefault("seen_items", {})
+    state = load_state()
+    seen = state.setdefault("seen_items", {})
 
-     # 1) Pull VC portfolios
-     vc_hits: Dict[str, Dict[str, Dict[str, str]]] = {}
--
--for src in VC_SOURCES:
--    projects = fetch_source_list(src)
--    logging.info("Fetched %d items from %s", len(projects), src.name)
--    for name, link in projects:
--        key = name.lower()
--        entry = vc_hits.setdefault(key, {"display": name, "sources": {}})
--        entry["display"] = name
--        entry["sources"][src.name] = link
-+    for src in VC_SOURCES:
-+        projects = fetch_source_list(src)
-+        logging.info("Fetched %d items from %s", len(projects), src.name)
-+        for disp_name, link in projects:
-+            # build a stable key (prefer external project domain, else normalized name)
-+            proj_domain = domain_of(link) if link else ""
-+            key = normalize_project_name(disp_name)
-+            if proj_domain and not re.search(
-+                r"(a16z|binance|paradigm|pantera|polychain|dragonfly|jumpcrypto|wintermute|animoca|okx|hashed|electriccapital|framework)",
-+                proj_domain, re.I
-+            ):
-+                key = proj_domain.lower()
-+            entry = vc_hits.setdefault(key, {"display": disp_name, "sources": {}})
-+            entry["display"] = disp_name
-+            entry["sources"][src.name] = link
--
--    # --- BOOTSTRAP OVERLAPS HERE (KEEP vc_hits ABOVE) ---
--    overlaps = state.setdefault("overlaps", {})
--    ts_now = now_local().isoformat(timespec="seconds")
--    for name_lc, entry in vc_hits.items():
--        tags = list(entry["sources"].keys())
--        if len(tags) >= 2:
--            first_link = next(iter(entry["sources"].values())) if entry["sources"] else None
--            if name_lc not in overlaps:
--                overlaps[name_lc] = {
--                    "name": entry["display"],
--                    "url": first_link,
--                    "vcs": sorted(tags),
--                    "score": 18,
--                    "first_seen": ts_now,
--                    "last_seen": ts_now,
--                }
-+    # --- BOOTSTRAP: record any overlaps we already see (first run/backfill) ---
-+    overlaps = state.setdefault("overlaps", {})
-+    ts_now = now_local().isoformat(timespec="seconds")
-+    for key, entry in vc_hits.items():
-+        tags = list(entry["sources"].keys())
-+        if len(tags) >= 2 and key not in overlaps:
-+            first_link = next(iter(entry["sources"].values())) if entry["sources"] else None
-+            overlaps[key] = {
-+                "name": entry["display"],
-+                "url": first_link,
-+                "vcs": sorted(tags),
-+                "score": 18,
-+                "first_seen": ts_now,
-+                "last_seen": ts_now,
-+            }
+    # 1) Pull VC portfolios
+    vc_hits: Dict[str, Dict[str, Dict[str, str]]] = {}
 
-     # 2) Optional: lightweight presence check (CoinGecko)
-     cg_names: Set[str] = set()
+    for src in VC_SOURCES:
+        projects = fetch_source_list(src)
+        logging.info("Fetched %d items from %s", len(projects), src.name)
+        for disp_name, link in projects:
+            # Build a stable key (prefer external project domain, else normalized name)
+            proj_domain = domain_of(link) if link else ""
+            key = normalize_project_name(disp_name)
+            if proj_domain and not re.search(
+                r"(a16z|binance|paradigm|pantera|polychain|dragonfly|jumpcrypto|wintermute|animoca|okx|hashed|electriccapital|framework)",
+                proj_domain, re.I
+            ):
+                key = proj_domain.lower()
+            entry = vc_hits.setdefault(key, {"display": disp_name, "sources": {}})
+            entry["display"] = disp_name
+            entry["sources"][src.name] = link
 
+    # --- BOOTSTRAP: record any overlaps we already see (first run/backfill) ---
+    overlaps = state.setdefault("overlaps", {})
+    ts_now = now_local().isoformat(timespec="seconds")
+    for key, entry in vc_hits.items():
+        tags = list(entry["sources"].keys())
+        if len(tags) >= 2 and key not in overlaps:
+            first_link = next(iter(entry["sources"].values())) if entry["sources"] else None
+            overlaps[key] = {
+                "name": entry["display"],
+                "url": first_link,
+                "vcs": sorted(tags),
+                "score": 18,
+                "first_seen": ts_now,
+                "last_seen": ts_now,
+            }
 
+    # 2) Optional: lightweight presence check (CoinGecko)
+    cg_names: Set[str] = set()
     if COINGECKO_NEW_COIN_CHECK:
         coins = coingecko_new_coins()
         for c in coins:
@@ -820,32 +794,29 @@ def send_email_html(subject: str, html_body: str, plain_fallback: str = "") -> b
         logging.info("CoinGecko list size: %d", len(cg_names))
 
     # 3) Compute signals and alert on NEW ones only
-    for name_lc, entry in vc_hits.items():
+    for key, entry in vc_hits.items():
         source_map = entry["sources"]
         display_name = entry["display"]
         first_link = next(iter(source_map.values())) if source_map else None
         tags = list(source_map.keys())
 
-        # --- REQUIRE MULTI VC ---
         if REQUIRE_MULTI_VC and len(tags) < 2:
             continue
-        # ------------------------
 
-        has_cg = name_lc in cg_names
+        has_cg = display_name.lower() in cg_names
         score = score_project(display_name, first_link, tags, has_cg)
 
         if score >= SCORE_THRESHOLD:
-            bucket = f"{name_lc}:{score}"
+            bucket = f"{key}:{score}"  # use stable key
             seen_src = seen.setdefault("vc_signals", [])
             if bucket not in seen_src:
                 seen_src.append(bucket)
 
-                # --- overlaps registry (first_seen/last_seen) ---
-                overlaps = state.setdefault("overlaps", {})
-                ov = overlaps.get(name_lc)
+                # overlaps registry (first_seen/last_seen)
+                ov = overlaps.get(key)
                 ts_now = now_local().isoformat(timespec="seconds")
                 if ov is None:
-                    overlaps[name_lc] = {
+                    overlaps[key] = {
                         "name": display_name,
                         "url": first_link,
                         "vcs": sorted(tags),
@@ -861,7 +832,6 @@ def send_email_html(subject: str, html_body: str, plain_fallback: str = "") -> b
                     ov["vcs"] = sorted(set(ov.get("vcs", [])).union(tags))
                     ov["score"] = max(int(ov.get("score", 0)), score)
 
-                # queue for digest (unchanged)
                 queue_signal(state, {
                     "name": display_name,
                     "url": first_link,
@@ -869,10 +839,10 @@ def send_email_html(subject: str, html_body: str, plain_fallback: str = "") -> b
                     "score": score,
                 })
 
-
-    # try to send the 4h digest if due
+    # Try to send the 4h digest if due
     send_digest_if_due(state)
-    # --- Generate REPORT.md (only if changed) ---
+
+    # Generate REPORT.md (only if changed)
     report_md = render_report_md(state)
     wrote_report = write_text_if_changed(REPORT_PATH, report_md)
     snapshot_path = maybe_write_daily_snapshot(report_md)
