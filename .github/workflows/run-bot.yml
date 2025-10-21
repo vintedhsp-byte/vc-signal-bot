@@ -50,15 +50,17 @@ jobs:
           python vc_signal_bot.py
 
       - name: Commit report if changed
-        run: |
-          set -e
-          git config user.name  "vc-bot"
-          git config user.email "vc-bot@users.noreply.github.com"
-          CHANGED=$(git status --porcelain -- REPORT.md reports/ vc_signal_state.json 2>/dev/null || true)
-          if [[ -n "$CHANGED" ]]; then
-            git add REPORT.md reports/ vc_signal_state.json || true
-            git commit -m "chore(report): auto-update $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-            git push
-          else
-            echo "No changes, skipping commit."
-          fi
+  run: |
+    set -e
+    git config user.name  "vc-bot"
+    git config user.email "vc-bot@users.noreply.github.com"
+    CHANGED=$(git status --porcelain -- REPORT.md reports/ vc_signal_state.json 2>/dev/null || true)
+    if [[ -n "$CHANGED" ]]; then
+      git add REPORT.md vc_signal_state.json || true
+      if [ -d reports ]; then git add reports; fi
+      git commit -m "chore(report): auto-update $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+      git push
+    else
+      echo "No changes, skipping commit."
+    fi
+
