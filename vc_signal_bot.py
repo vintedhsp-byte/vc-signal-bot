@@ -748,8 +748,8 @@ def main() -> None:
     # name_lower -> {"display": original_casing, "sources": {source_name: url}}
 vc_hits: Dict[str, Dict[str, Dict[str, str]]] = {}
 
-        for src in VC_SOURCES:
-        projects = fetch_source_list(src)
+for src in VC_SOURCES:
+    projects = fetch_source_list(src)
         logging.info("Fetched %d items from %s", len(projects), src.name)
         for name, link in projects:
             key = name.lower()
