@@ -744,18 +744,16 @@ def send_email_html(subject: str, html_body: str, plain_fallback: str = "") -> b
 # Main loop
 # -------------------------
 
- def main() -> None:
+def main() -> None:
     state = load_state()
     seen = state.setdefault("seen_items", {})
 
     # 1) Pull VC portfolios
     vc_hits: Dict[str, Dict[str, Dict[str, str]]] = {}
-
     for src in VC_SOURCES:
         projects = fetch_source_list(src)
         logging.info("Fetched %d items from %s", len(projects), src.name)
         for disp_name, link in projects:
-            # Build a stable key (prefer external project domain, else normalized name)
             proj_domain = domain_of(link) if link else ""
             key = normalize_project_name(disp_name)
             if proj_domain and not re.search(
@@ -767,7 +765,7 @@ def send_email_html(subject: str, html_body: str, plain_fallback: str = "") -> b
             entry["display"] = disp_name
             entry["sources"][src.name] = link
 
-    # --- BOOTSTRAP: record any overlaps we already see (first run/backfill) ---
+    # --- BOOTSTRAP existing overlaps on first run ---
     overlaps = state.setdefault("overlaps", {})
     ts_now = now_local().isoformat(timespec="seconds")
     for key, entry in vc_hits.items():
@@ -783,7 +781,7 @@ def send_email_html(subject: str, html_body: str, plain_fallback: str = "") -> b
                 "last_seen": ts_now,
             }
 
-    # 2) Optional: lightweight presence check (CoinGecko)
+    # 2) CoinGecko presence check
     cg_names: Set[str] = set()
     if COINGECKO_NEW_COIN_CHECK:
         coins = coingecko_new_coins()
@@ -793,64 +791,34 @@ def send_email_html(subject: str, html_body: str, plain_fallback: str = "") -> b
                 cg_names.add(nm.lower())
         logging.info("CoinGecko list size: %d", len(cg_names))
 
-    # 3) Compute signals and alert on NEW ones only
+    # 3) Compute NEW signals
     for key, entry in vc_hits.items():
-        source_map = entry["sources"]
-        display_name = entry["display"]
-        first_link = next(iter(source_map.values())) if source_map else None
-        tags = list(source_map.keys())
-
+        tags = list(entry["sources"].keys())
         if REQUIRE_MULTI_VC and len(tags) < 2:
             continue
 
-        has_cg = display_name.lower() in cg_names
-        score = score_project(display_name, first_link, tags, has_cg)
+        disp = entry["display"]
+        link = next(iter(entry["sources"].values())) if entry["sources"] else None
+        score = score_project(disp, link, tags, disp.lower() in cg_names)
 
         if score >= SCORE_THRESHOLD:
-            bucket = f"{key}:{score}"  # use stable key
+            bucket = f"{key}:{score}"
             seen_src = seen.setdefault("vc_signals", [])
             if bucket not in seen_src:
                 seen_src.append(bucket)
 
-                # overlaps registry (first_seen/last_seen)
-                ov = overlaps.get(key)
-                ts_now = now_local().isoformat(timespec="seconds")
-                if ov is None:
-                    overlaps[key] = {
-                        "name": display_name,
-                        "url": first_link,
-                        "vcs": sorted(tags),
-                        "score": score,
-                        "first_seen": ts_now,
-                        "last_seen": ts_now,
-                    }
-                else:
-                    ov["last_seen"] = ts_now
-                    ov["name"] = display_name or ov.get("name", display_name)
-                    if first_link and not ov.get("url"):
-                        ov["url"] = first_link
-                    ov["vcs"] = sorted(set(ov.get("vcs", [])).union(tags))
-                    ov["score"] = max(int(ov.get("score", 0)), score)
+                ov = overlaps.setdefault(key, {})
+                ov["name"] = disp
+                ov["url"] = ov.get("url") or link
+                ov["vcs"] = sorted(set(ov.get("vcs", [])).union(tags))
+                ov["score"] = max(int(ov.get("score", 0)), score)
+                ov["last_seen"] = ts_now
 
-                queue_signal(state, {
-                    "name": display_name,
-                    "url": first_link,
-                    "tags": tags,
-                    "score": score,
-                })
+                queue_signal(state, {"name": disp, "url": link, "tags": tags, "score": score})
 
-    # Try to send the 4h digest if due
     send_digest_if_due(state)
-
-    # Generate REPORT.md (only if changed)
     report_md = render_report_md(state)
-    wrote_report = write_text_if_changed(REPORT_PATH, report_md)
-    snapshot_path = maybe_write_daily_snapshot(report_md)
-    if wrote_report:
-        logging.info("Updated %s", REPORT_PATH)
-    if snapshot_path:
-        logging.info("Wrote daily snapshot %s", snapshot_path)
-
+    write_text_if_changed(REPORT_PATH, report_md)
     save_state(state)
 
 
