@@ -117,6 +117,10 @@ def save_state(state: dict) -> None:
 
 
 def normalize_project_name(name: str) -> str:
+    name = re.sub(r"\s+", " ", name).strip().lower()
+    # drop common suffixes
+    name = re.sub(r"\b(labs|protocol|network|foundation|inc\.?|ltd\.?|co\.?|dao|finance|capital|protocols)\b", "", name)
+    name = re.sub(r"[^\w\s]", "", name)          # remove punctuation
     name = re.sub(r"\s+", " ", name).strip()
     return name
 
@@ -740,24 +744,72 @@ def send_email_html(subject: str, html_body: str, plain_fallback: str = "") -> b
 # Main loop
 # -------------------------
 
-def main() -> None:
-    state = load_state()
-    seen = state.setdefault("seen_items", {})  # type: ignore
+ def main() -> None:
+     state = load_state()
+     seen = state.setdefault("seen_items", {})
 
-    # 1) Pull VC portfolios
-    vc_hits: Dict[str, Dict[str, Dict[str, str]]] = {}
+     # 1) Pull VC portfolios
+     vc_hits: Dict[str, Dict[str, Dict[str, str]]] = {}
+-
+-for src in VC_SOURCES:
+-    projects = fetch_source_list(src)
+-    logging.info("Fetched %d items from %s", len(projects), src.name)
+-    for name, link in projects:
+-        key = name.lower()
+-        entry = vc_hits.setdefault(key, {"display": name, "sources": {}})
+-        entry["display"] = name
+-        entry["sources"][src.name] = link
++    for src in VC_SOURCES:
++        projects = fetch_source_list(src)
++        logging.info("Fetched %d items from %s", len(projects), src.name)
++        for disp_name, link in projects:
++            # build a stable key (prefer external project domain, else normalized name)
++            proj_domain = domain_of(link) if link else ""
++            key = normalize_project_name(disp_name)
++            if proj_domain and not re.search(
++                r"(a16z|binance|paradigm|pantera|polychain|dragonfly|jumpcrypto|wintermute|animoca|okx|hashed|electriccapital|framework)",
++                proj_domain, re.I
++            ):
++                key = proj_domain.lower()
++            entry = vc_hits.setdefault(key, {"display": disp_name, "sources": {}})
++            entry["display"] = disp_name
++            entry["sources"][src.name] = link
+-
+-    # --- BOOTSTRAP OVERLAPS HERE (KEEP vc_hits ABOVE) ---
+-    overlaps = state.setdefault("overlaps", {})
+-    ts_now = now_local().isoformat(timespec="seconds")
+-    for name_lc, entry in vc_hits.items():
+-        tags = list(entry["sources"].keys())
+-        if len(tags) >= 2:
+-            first_link = next(iter(entry["sources"].values())) if entry["sources"] else None
+-            if name_lc not in overlaps:
+-                overlaps[name_lc] = {
+-                    "name": entry["display"],
+-                    "url": first_link,
+-                    "vcs": sorted(tags),
+-                    "score": 18,
+-                    "first_seen": ts_now,
+-                    "last_seen": ts_now,
+-                }
++    # --- BOOTSTRAP: record any overlaps we already see (first run/backfill) ---
++    overlaps = state.setdefault("overlaps", {})
++    ts_now = now_local().isoformat(timespec="seconds")
++    for key, entry in vc_hits.items():
++        tags = list(entry["sources"].keys())
++        if len(tags) >= 2 and key not in overlaps:
++            first_link = next(iter(entry["sources"].values())) if entry["sources"] else None
++            overlaps[key] = {
++                "name": entry["display"],
++                "url": first_link,
++                "vcs": sorted(tags),
++                "score": 18,
++                "first_seen": ts_now,
++                "last_seen": ts_now,
++            }
 
-    for src in VC_SOURCES:
-        projects = fetch_source_list(src)
-        logging.info("Fetched %d items from %s", len(projects), src.name)
-        for name, link in projects:
-            key = name.lower()
-            entry = vc_hits.setdefault(key, {"display": name, "sources": {}})
-            entry["display"] = name  # keep latest casing
-            entry["sources"][src.name] = link
+     # 2) Optional: lightweight presence check (CoinGecko)
+     cg_names: Set[str] = set()
 
-    # 2) Optional: lightweight presence check (CoinGecko)
-    cg_names: Set[str] = set()
 
     if COINGECKO_NEW_COIN_CHECK:
         coins = coingecko_new_coins()
