@@ -207,9 +207,72 @@
       "privacy policy:11",
       "terms of use:11",
       "terms of use (ios):11",
-      "press@animocabrands.com:11"
+      "press@animocabrands.com:11",
+      "x.com:19",
+      "www.linkedin.com:19",
+      "medium.com:19",
+      "twitter.com:19"
     ]
   },
   "pending_signals": [],
-  "overlaps": {}
+  "overlaps": {
+    "x.com": {
+      "name": "x twitter",
+      "url": "https://x.com/yzilabs/jobs",
+      "vcs": [
+        "Binance Labs Portfolio",
+        "Framework Ventures Portfolio",
+        "Multicoin Capital Portfolio"
+      ],
+      "score": 19,
+      "first_seen": "2025-10-21T11:54:53+02:00",
+      "last_seen": "2025-10-21T11:54:53+02:00"
+    },
+    "jobs": {
+      "name": "jobs",
+      "url": "https://jobs.a16z.com/",
+      "vcs": [
+        "Framework Ventures Portfolio",
+        "a16z Crypto Portfolio"
+      ],
+      "score": 18,
+      "first_seen": "2025-10-21T11:54:53+02:00",
+      "last_seen": "2025-10-21T11:54:53+02:00"
+    },
+    "www.linkedin.com": {
+      "name": "linkedin",
+      "url": "https://www.linkedin.com/company/wintermute-trading",
+      "vcs": [
+        "Dragonfly Portfolio",
+        "Hashed Portfolio",
+        "Wintermute Investments"
+      ],
+      "score": 19,
+      "first_seen": "2025-10-21T11:54:53+02:00",
+      "last_seen": "2025-10-21T11:54:53+02:00"
+    },
+    "medium.com": {
+      "name": "medium",
+      "url": "https://medium.com/dragonfly-research",
+      "vcs": [
+        "Dragonfly Portfolio",
+        "Hashed Portfolio"
+      ],
+      "score": 19,
+      "first_seen": "2025-10-21T11:54:53+02:00",
+      "last_seen": "2025-10-21T11:54:53+02:00"
+    },
+    "twitter.com": {
+      "name": "twitter",
+      "url": "https://twitter.com/hosseeb",
+      "vcs": [
+        "Dragonfly Portfolio",
+        "Hashed Portfolio"
+      ],
+      "score": 19,
+      "first_seen": "2025-10-21T11:54:53+02:00",
+      "last_seen": "2025-10-21T11:54:53+02:00"
+    }
+  },
+  "last_digest_sent": "2025-10-21T11:54:54+02:00"
 }
