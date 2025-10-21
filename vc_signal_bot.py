@@ -746,7 +746,7 @@ def main() -> None:
 
     # 1) Pull VC portfolios
     # name_lower -> {"display": original_casing, "sources": {source_name: url}}
-    vc_hits: Dict[str, Dict[str, Dict[str, str]]] = {}
+vc_hits: Dict[str, Dict[str, Dict[str, str]]] = {}
 
         for src in VC_SOURCES:
         projects = fetch_source_list(src)
