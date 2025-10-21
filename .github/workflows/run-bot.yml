@@ -1,12 +1,12 @@
 name: VC Signals Bot
 
 on:
-  workflow_dispatch:  # allows manual runs
+  workflow_dispatch:
   schedule:
     - cron: "0 */4 * * *"   # every 4 hours
 
 permissions:
-  contents: write  # needed to push commits
+  contents: write
 
 jobs:
   run:
@@ -35,9 +35,8 @@ jobs:
           TIMEZONE: "Europe/Paris"
           DIGEST_INTERVAL_HOURS: "4"
           REPORT_PATH: "REPORT.md"
-          SNAPSHOT_DAILY: "false"    # set "true" if you want /reports/YYYY-MM-DD.md
+          SNAPSHOT_DAILY: "false"
 
-          # secrets (from GitHub Settings → Secrets and variables → Actions)
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
@@ -50,17 +49,16 @@ jobs:
         run: |
           python vc_signal_bot.py
 
-      - name: Commit report (only if changed)
+      - name: Commit report if changed
         run: |
           set -e
           git config user.name  "vc-bot"
           git config user.email "vc-bot@users.noreply.github.com"
-          # include state so first_seen persists across runs
           CHANGED=$(git status --porcelain -- REPORT.md reports/ vc_signal_state.json 2>/dev/null || true)
           if [[ -n "$CHANGED" ]]; then
             git add REPORT.md reports/ vc_signal_state.json || true
             git commit -m "chore(report): auto-update $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             git push
           else
-            echo "No changes to report/state; skip commit."
+            echo "No changes, skipping commit."
           fi
