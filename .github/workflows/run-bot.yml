@@ -1,0 +1,66 @@
+name: VC Signals Bot
+
+on:
+  workflow_dispatch:  # allows manual runs
+  schedule:
+    - cron: "0 */4 * * *"   # every 4 hours
+
+permissions:
+  contents: write  # needed to push commits
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install -U pip
+          pip install -r requirements.txt
+
+      - name: Run bot (ONE_SHOT)
+        env:
+          ONE_SHOT: "true"
+          PREFERRED_DEST: "email"
+          REQUIRE_MULTI_VC: "true"
+          TIMEZONE: "Europe/Paris"
+          DIGEST_INTERVAL_HOURS: "4"
+          REPORT_PATH: "REPORT.md"
+          SNAPSHOT_DAILY: "false"    # set "true" if you want /reports/YYYY-MM-DD.md
+
+          # secrets (from GitHub Settings → Secrets and variables → Actions)
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          SMTP_FROM: ${{ secrets.SMTP_FROM }}
+          EMAIL_TO:  ${{ secrets.EMAIL_TO }}
+
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:   ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python vc_signal_bot.py
+
+      - name: Commit report (only if changed)
+        run: |
+          set -e
+          git config user.name  "vc-bot"
+          git config user.email "vc-bot@users.noreply.github.com"
+          # include state so first_seen persists across runs
+          CHANGED=$(git status --porcelain -- REPORT.md reports/ vc_signal_state.json 2>/dev/null || true)
+          if [[ -n "$CHANGED" ]]; then
+            git add REPORT.md reports/ vc_signal_state.json || true
+            git commit -m "chore(report): auto-update $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            git push
+          else
+            echo "No changes to report/state; skip commit."
+          fi
