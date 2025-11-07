@@ -1,6 +1,6 @@
 # VC Signals — Multi-VC Overlaps Report
 
-_Auto-generated: 2025-11-07 17:45 (Europe/Paris)_
+_Auto-generated: 2025-11-07 21:33 (Europe/Paris)_
 
 
 ## Today’s new overlaps
