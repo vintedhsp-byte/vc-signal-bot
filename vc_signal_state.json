@@ -211,7 +211,8 @@
       "x.com:19",
       "www.linkedin.com:19",
       "medium.com:19",
-      "twitter.com:19"
+      "twitter.com:19",
+      "www.youtube.com:19"
     ]
   },
   "pending_signals": [],
@@ -272,7 +273,18 @@
       "score": 19,
       "first_seen": "2025-10-21T11:54:53+02:00",
       "last_seen": "2025-10-21T11:54:53+02:00"
+    },
+    "www.youtube.com": {
+      "name": "youtube",
+      "url": "https://www.youtube.com/@a16z",
+      "vcs": [
+        "Wintermute Investments",
+        "a16z Crypto Portfolio"
+      ],
+      "score": 19,
+      "first_seen": "2026-03-06T14:05:32+01:00",
+      "last_seen": "2026-03-06T14:05:32+01:00"
     }
   },
-  "last_digest_sent": "2025-10-21T11:54:54+02:00"
+  "last_digest_sent": "2026-03-06T14:05:34+01:00"
 }
