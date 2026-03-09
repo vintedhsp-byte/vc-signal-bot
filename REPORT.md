@@ -1,6 +1,6 @@
 # VC Signals — Multi-VC Overlaps Report
 
-_Auto-generated: 2026-03-08 21:32 (Europe/Paris)_
+_Auto-generated: 2026-03-09 03:34 (Europe/Paris)_
 
 
 ## Today’s new overlaps
@@ -10,9 +10,7 @@ _No new overlaps in this window._
 
 ## Weekly new overlaps
 
-| Project | First Seen (local) | VCs | Score | Link |
-| --- | --- | --- | --- | --- |
-| youtube | 2026-03-06 14:05 | Wintermute Investments, a16z Crypto Portfolio | 19 | [link](https://www.youtube.com/@a16z) |
+_No new overlaps in this window._
 
 
 ## Monthly new overlaps
