@@ -1,6 +1,6 @@
 # VC Signals — Multi-VC Overlaps Report
 
-_Auto-generated: 2026-03-31 22:49 (Europe/Paris)_
+_Auto-generated: 2026-04-01 04:57 (Europe/Paris)_
 
 
 ## Today’s new overlaps
@@ -15,9 +15,7 @@ _No new overlaps in this window._
 
 ## Monthly new overlaps
 
-| Project | First Seen (local) | VCs | Score | Link |
-| --- | --- | --- | --- | --- |
-| youtube | 2026-03-06 14:05 | Wintermute Investments, a16z Crypto Portfolio | 19 | [link](https://www.youtube.com/@a16z) |
+_No new overlaps in this window._
 
 
 > Definition: “new overlaps” means the project’s **first time** it qualified as a multi-VC match within the window.
